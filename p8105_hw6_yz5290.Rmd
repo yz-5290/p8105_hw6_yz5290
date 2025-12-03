@@ -120,42 +120,71 @@ weather_df=
 set.seed(123)
 n_boot=5000
 
-boot_results = 
-  tibble(boot_id = 1:5000) |>
+weather_boot_results = 
+  weather_df |> 
+  bootstrap(n = 5000) |> 
   mutate(
-    resample = map(boot_id, ~weather_df[sample(nrow(weather_df), replace = TRUE), ]),
-    model = map(resample, ~lm(tmax ~ tmin + prcp, data = .x)),
-    r2 = map_dbl(model, ~glance(.x)$r.squared),
-    beta_prod = map_dbl(model, ~{
-      coefs = tidy(.x)
-      coefs$estimate[2] * coefs$estimate[3]  # β1 * β2
-    })
-  ) |>
-  select(boot_id, r2, beta_prod)
-boot_results |>
-  summarise(
-    r2_mean = mean(r2),
-    r2_ci_low = quantile(r2, 0.025),
-    r2_ci_high = quantile(r2, 0.975),
-    beta_mean = mean(beta_prod),
-    beta_ci_low = quantile(beta_prod, 0.025),
-    beta_ci_high = quantile(beta_prod, 0.975)
+    # Convert strap to tibble
+    df = map(strap, as_tibble),
+    # Fit linear model
+    fits = map(df, ~lm(tmax ~ tmin + prcp, data = .x)),
+    # Extract coefficients
+    betas = map(fits, broom::tidy),
+    # Extract R-squared
+    rsquared = map(fits, broom::glance)
+  ) |> 
+  # Unnest the results
+  select(.id, betas, rsquared) |> 
+  unnest(c(betas, rsquared), names_sep = "_") |> 
+  # Select relevant columns
+  select(.id, betas_term, betas_estimate, rsquared_r.squared) |> 
+  # Remove intercept
+  filter(betas_term != "(Intercept)") |> 
+  # Calculate beta1/beta2 (tmin coefficient / prcp coefficient)
+  group_by(.id) |>
+  summarize(
+    r_squared = first(rsquared_r.squared),
+    beta1 = betas_estimate[betas_term == "tmin"],
+    beta2 = betas_estimate[betas_term == "prcp"],
+    beta_ratio = beta1 / beta2
   )
 
+```
+```{r}
+#summary
+boot_summary = 
+  weather_boot_results |>
+  summarise(
+    r2_mean = mean(r_squared),
+    r2_sd = sd(r_squared),
+    r2_ci_low = quantile(r_squared, 0.025),
+    r2_ci_high = quantile(r_squared, 0.975),
+    ratio_mean = mean(beta_ratio),
+    ratio_sd = sd(beta_ratio),
+    ratio_ci_low = quantile(beta_ratio, 0.025),
+    ratio_ci_high = quantile(beta_ratio, 0.975)
+  )
+boot_summary
 ```
 
 ```{r}
 p1 = 
-  boot_results |>
-  ggplot(aes(x = r2)) +
-  geom_histogram(fill = "lightblue", bins = 30) +
-  labs(title = "Bootstrap Distribution of R²")
+  weather_boot_results |> 
+  ggplot(aes(x = r_squared)) +
+  geom_density(fill = "lightblue", alpha = 0.7) +
+  labs(
+    title = "Bootstrap Distribution of R-squared"
+  ) +
+  theme_minimal()
 p1
 p2 = 
-  boot_results |>
-  ggplot(aes(x = beta_prod)) +
-  geom_histogram(fill = "lightgreen", bins = 30) +
-  labs(title = "Bootstrap Distribution of β1β2")
+ weather_boot_results |> 
+  ggplot(aes(x = beta_ratio)) +
+  geom_density(fill = "lightgreen", alpha = 0.7) +
+  labs(
+    title = expression(paste("Bootstrap Distribution of ", beta[1], "/", beta[2]))
+  ) +
+  theme_minimal()
 p2
 ```
 
@@ -165,7 +194,7 @@ The R squared value is around 0.942 is in the range of confidence interval (0.93
 
 
 #for plot 2:
-The distribution of beta coeifficient is somehow left skewed with the negative peak-0.0058, which suggest that coefficient for tmin and prcp have opposite signs. The 95% CI (-0.0082, -0.0037) suggests a fairly tight distribution
+The distribution of beta coeifficient is somehow left skewed with the negative peak-180, which suggest that coefficient for tmin and prcp have opposite signs. The 95% CI (-279, -125) suggests a fairly tight distribution
  
 
 P3
