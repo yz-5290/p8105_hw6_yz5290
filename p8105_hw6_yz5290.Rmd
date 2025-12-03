@@ -1,0 +1,107 @@
+---
+title: "p8105_hw6_yz5290"
+output: html_document
+date: "2025-12-03"
+---
+
+```{r}
+library(tidyverse)
+library(broom)
+```
+p1
+```{r}
+homicide=
+  read_csv("data/homicide-data.csv")|>
+  janitor::clean_names()|>
+  mutate(city_state = str_c(city, ", ", state)) |>
+  mutate(solved = as.numeric(disposition == "Closed by arrest")) |>
+  filter(!city_state %in% c("Dallas, TX", "Phoenix, AZ", 
+                           "Kansas City, MO", "Tulsa, AL")) |>
+  filter(victim_race %in% c("White", "Black")) |>
+  mutate(victim_age = as.numeric(victim_age)) |>
+  filter(!is.na(victim_age))
+```
+```{r}
+#Baltimore
+baltimore_data = 
+  homicide |>
+  filter(city_state == "Baltimore, MD")
+baltimore_model = 
+  glm(solved ~ victim_age + victim_sex + victim_race,
+      data = baltimore_data,
+      family = binomial())
+baltimore_results = 
+  baltimore_model |>
+  tidy(conf.int = TRUE) |>
+  filter(term == "victim_sexMale") |>
+  mutate(
+    OR = exp(estimate),
+    OR_CI_low = exp(conf.low),
+    OR_CI_high = exp(conf.high),
+    city_state = "Baltimore, MD"
+  ) |>
+  select(city_state, OR, OR_CI_low, OR_CI_high)
+
+```
+```{r}
+baltimore_results
+```
+```{r}
+fit_city_model = function(city_df) {
+  model_fit = 
+    glm(solved ~ victim_age + victim_sex + victim_race,
+        data = city_df,
+        family = binomial())
+  model_fit |>
+    tidy(conf.int = TRUE) |>
+    filter(term == "victim_sexMale") |>
+    mutate(
+      OR = exp(estimate),
+      OR_CI_low = exp(conf.low),
+      OR_CI_high = exp(conf.high)
+    ) |>
+    select(OR, OR_CI_low, OR_CI_high)
+}
+city_results = 
+  homicide |>
+  group_by(city_state) |>
+  filter(n() >= 10) |>
+  nest() |>
+  mutate(
+    model_results = map(data, ~possibly(fit_city_model, otherwise = NULL)(.x))
+  ) |>
+  filter(!map_lgl(model_results, is.null)) |>
+  unnest(model_results) |>
+  select(-data) |>
+  arrange(OR)
+
+  
+  
+```
+```{r}
+#make plot
+city_plot = 
+  city_results |>
+  mutate(city_state = fct_reorder(city_state, OR)) |>
+  ggplot(aes(x = OR, y = city_state)) +
+  geom_point(size = 2)+
+  geom_vline(xintercept = 1, linetype = "dashed", 
+             color = "red", alpha = 0.5) +
+  geom_errorbarh(aes(xmin = OR_CI_low, xmax = OR_CI_high), 
+                 height = 0.2, alpha = 0.7) +
+  labs(
+    title = "Odds Ratios for Solving Homicides: Male vs Female Victims",
+    subtitle = "Controlling for victim age and race",
+    x = "Odds Ratio (Male vs Female)",
+    y = "City"
+  ) +
+  theme_minimal()
+city_plot
+```
+#this graph shows that most of points is smaller than 1, which means widespread pattern of lower clearance for male victims. Overall, homicides with female victims are more likely to be solved than those with male victims,
+
+
+
+
+
+p2
