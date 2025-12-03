@@ -7,6 +7,7 @@ date: "2025-12-03"
 ```{r}
 library(tidyverse)
 library(broom)
+library(modelr)
 ```
 p1
 ```{r}
@@ -166,5 +167,142 @@ The R squared value is around 0.942 is in the range of confidence interval (0.93
 #for plot 2:
 The distribution of beta coeifficient is somehow left skewed with the negative peak-0.0058, which suggest that coefficient for tmin and prcp have opposite signs. The 95% CI (-0.0082, -0.0037) suggests a fairly tight distribution
  
+
+P3
+```{r}
+birthweight=
+  read_csv("data/birthweight.csv")|>
+  janitor::clean_names()|>
+  mutate(
+    babysex = factor(babysex, labels = c("male", "female")),
+    frace = factor(frace, 
+                  levels = c(1, 2, 3, 4, 8, 9),
+                  labels = c("White", "Black", "Asian", 
+                            "Puerto Rican", "Other", "Unknown")),
+    malform = factor(malform, levels = c(0, 1), labels = c("absent", "present")),
+    mrace = factor(mrace,
+                  levels = c(1, 2, 3, 4, 8),
+                  labels = c("White", "Black", "Asian", 
+                            "Puerto Rican", "Other"))
+  )
+
+
+```
+
+```{r}
+#model1
+#I want to explore socioeconomic like finial situation, mother's race and parity and behavioral determinants like smoking relate to birthweight. 
+
+
+my_original_model = lm(
+  bwt ~ fincome + momage + smoken + mrace + parity + ppbmi,
+  data = birthweight
+)
+
+# Model summary
+summary_my_model = tidy(my_original_model, conf.int = TRUE)
+summary_my_model
+
+```
+
+```{r}
+#make the residual plot
+residual_plot1 = 
+  birthweight |>
+  add_predictions(my_original_model) |>
+  add_residuals(my_original_model) |>
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point(alpha = 0.2, color = "darkblue") +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Residuals vs Fitted Values: Socioeconomic-Behavioral Model",
+    x = "Predicted Birthweight (grams)",
+    y = "Residuals (Observed - Predicted)"
+  ) +
+  theme_minimal()
+residual_plot1
+```
+#residual for  Socioeconomic-Behavioral Model are not raonld scattered. points mainly cluster aounrd 2900 and 3300 predicted birth weights. upper and lower region have almost symmetric figures while lower region have more points. 
+
+```{r}
+#model1: using length at birth and gestational age as predictors (main effects only)
+model1 = lm(bwt ~ blength + gaweeks, data = birthweight)
+#model2:using head circumference, length, sex, and all interactions (including the three-way interaction) between these
+model2 = lm(bwt ~ bhead * blength * babysex, data = birthweight)
+
+model1
+model2
+
+```
+
+
+```{r}
+# Cross-validation framework
+set.seed(123)
+cv_df = 
+  crossv_mc(birthweight, n = 100) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+# Fit models in cross-validation
+cv_df1 = cv_df |> 
+  mutate(
+    # My model
+    my_fit = map(train, \(df) lm(bwt ~ fincome + momage + smoken + mrace + parity + ppbmi, 
+                                 data = df)),
+    # Comparison model 1
+    no_inter_fit = map(train, \(df) lm(bwt ~ blength + gaweeks, data = df)),
+    # Comparison model 2
+    w_inter_fit = map(train, \(df) lm(bwt ~ bhead * blength * babysex, data = df))
+  ) |> 
+  mutate(
+    rmse_my_model = map2_dbl(my_fit, test, rmse),
+    rmse_no_inter = map2_dbl(no_inter_fit, test, rmse),
+    rmse_w_inter = map2_dbl(w_inter_fit, test, rmse)
+  )
+cv_df1
+  violin_plot = 
+  cv_df |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) |> 
+  mutate(
+    model = case_when(
+      model == "my_model" ~ "My Socioeconomic Model",
+      model == "no_inter" ~ "Length and Gestational Age",
+      model == "w_inter" ~ "Head and Length and Sex Interactions"
+    ),
+    model = factor(model, levels = c("Length and Gestational Age",
+                                     "My Socioeconomic Model",
+                                     "Head and Length and Sex Interactions"))
+  ) |> 
+  ggplot(aes(x = model, y = rmse, fill = model)) +
+  geom_violin(alpha = 0.7) +
+  geom_boxplot(width = 0.1, fill = "white", alpha = 0.8) +
+  labs(
+    title = "Violin Plot of Model Prediction Error Distribution",
+    x = "Model",
+    y = "Root Mean Square Error (RMSE, grams)"
+  ) +
+  theme_minimal() 
+violin_plot
+```
+
+
+
+
+
+
+
+
+
+
+
+
 
 
