@@ -214,7 +214,11 @@ birthweight=
                   labels = c("White", "Black", "Asian", 
                             "Puerto Rican", "Other"))
   )
-
+#check for missing values
+birthweight |>
+  summarise(across(everything(), ~sum(is.na(.)))) |>
+  pivot_longer(everything()) |>
+  filter(value > 0)
 
 ```
 
