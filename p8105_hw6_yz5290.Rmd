@@ -191,7 +191,7 @@ birthweight=
 
 ```{r}
 #model1
-#I want to explore socioeconomic like finial situation, mother's race and parity and behavioral determinants like smoking relate to birthweight. 
+#I want to explore socioeconomic like finial situation, mother's race and parity and behavioral determinants like smoking relate to birthweight. so i include variable fincome, momage, smoken,, mrace, arity and pp bmi. pp bmi act like a control. 
 
 
 my_original_model = lm(
@@ -204,6 +204,7 @@ summary_my_model = tidy(my_original_model, conf.int = TRUE)
 summary_my_model
 
 ```
+
 
 ```{r}
 #make the residual plot
@@ -222,8 +223,7 @@ residual_plot1 =
   theme_minimal()
 residual_plot1
 ```
-#residual for  Socioeconomic-Behavioral Model are not raonld scattered. points mainly cluster aounrd 2900 and 3300 predicted birth weights. upper and lower region have almost symmetric figures while lower region have more points. 
-
+#residual for  Socioeconomic-Behavioral Model are not raonld scattered. The clustering suggests the model struggles to predict the full range of birthweights, particularly for extreme values. Points mainly cluster aounrd 2900 and 3300 predicted birth weights. There is unequal variance across predictions beacuse there are more points in lower region.The model may be adequate for "average" birthweights but less reliable for low or high birthweight cases
 ```{r}
 #model1: using length at birth and gestational age as predictors (main effects only)
 model1 = lm(bwt ~ blength + gaweeks, data = birthweight)
@@ -234,10 +234,9 @@ model1
 model2
 
 ```
-
-
 ```{r}
 # Cross-validation framework
+
 set.seed(123)
 cv_df = 
   crossv_mc(birthweight, n = 100) |> 
@@ -245,6 +244,10 @@ cv_df =
     train = map(train, as_tibble),
     test = map(test, as_tibble)
   )
+```
+
+
+```{r}
 # Fit models in cross-validation
 cv_df1 = cv_df |> 
   mutate(
@@ -261,9 +264,8 @@ cv_df1 = cv_df |>
     rmse_no_inter = map2_dbl(no_inter_fit, test, rmse),
     rmse_w_inter = map2_dbl(w_inter_fit, test, rmse)
   )
-cv_df1
   violin_plot = 
-  cv_df |> 
+  cv_df1 |> 
   select(starts_with("rmse")) |> 
   pivot_longer(
     everything(),
@@ -292,7 +294,7 @@ cv_df1
   theme_minimal() 
 violin_plot
 ```
-
+The length+GA model is significantly better than my socioeconomic model and my model has the highest prediction error. Head×Length×Sex interactions model is the best since it has lowest RMSE 280g. 
 
 
 
